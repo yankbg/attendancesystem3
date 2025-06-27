@@ -1,54 +1,52 @@
-const express = require('express');
 const mysql = require('mysql2/promise');
-const cors = require('cors');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware to enable CORS and parse JSON and URL-encoded bodies
-app.use(cors({
-  origin: '*',
-  methods: ['POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// MySQL connection config - replace with your actual credentials or use env variables
 const dbConfig = {
-host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: 3306,
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  port: 3306,
 };
 
-// Handle preflight OPTIONS request (CORS)
-app.options('/check_student', (req, res) => {
-  res.sendStatus(200);
-});
+module.exports = async (req, res) => {
+  // CORS headers for browser/app access
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-app.post('/check_student', async (req, res) => {
+  // Handle preflight OPTIONS request (CORS)
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ status: 'error', message: 'Only POST requests are allowed' });
+    return;
+  }
+
   try {
-    // Accept both JSON and URL-encoded data
+    // Accept both JSON and URL-encoded data (Vercel parses JSON automatically)
     const studentIdRaw = req.body.studentId;
     const fullnameRaw = req.body.fullname;
 
     // Validate inputs
     if (!studentIdRaw || !fullnameRaw) {
-      return res.status(400).json({
+      res.status(400).json({
         status: 'error',
         message: 'Missing studentId or fullname',
       });
+      return;
     }
 
     // Validate studentId is numeric
     const studentId = Number(studentIdRaw);
     if (isNaN(studentId)) {
-      return res.status(400).json({
+      res.status(400).json({
         status: 'error',
         message: 'Invalid studentId',
       });
+      return;
     }
 
     const fullname = fullnameRaw.toLowerCase();
@@ -65,13 +63,13 @@ app.post('/check_student', async (req, res) => {
     await conn.end();
 
     if (rows.length > 0) {
-      return res.json({
+      res.status(200).json({
         status: 'success',
         exists: true,
-        image_path: rows[0].image_path, // relative or absolute URL to student image
+        image_path: rows[0].image_path,
       });
     } else {
-      return res.status(404).json({
+      res.status(404).json({
         status: 'error',
         exists: false,
         message: 'Student not found',
@@ -79,14 +77,9 @@ app.post('/check_student', async (req, res) => {
     }
   } catch (error) {
     console.error('Error in /check_student:', error);
-    return res.status(500).json({
+    res.status(500).json({
       status: 'error',
       message: 'Internal server error',
     });
   }
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+};
