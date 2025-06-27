@@ -14,11 +14,11 @@ app.use(cors({
 
 // MySQL connection config - replace with your actual credentials or use env variables
 const dbConfig = {
-  host: 'localhost',
-  user: 'root',
-  password: '1234yan#$',
-  database: 'attendancesystem',
-  port: 3306,
+host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    port: 3306,
 };
 
 // Handle preflight OPTIONS request
