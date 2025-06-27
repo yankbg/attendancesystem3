@@ -1,71 +1,67 @@
-const express = require('express');
 const mysql = require('mysql2/promise');
-const cors = require('cors');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['POST', 'OPTIONS', 'GET'],
-  allowedHeaders: ['Content-Type'],
-}));
-app.use(express.json({ limit: '10mb' })); // Adjust limit if needed
-
-// MySQL config - replace with your actual credentials or use env variables
 const dbConfig = {
- host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: 3306,
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  port: 3306,
 };
 
-// Handle preflight OPTIONS request
-app.options('/mark_attendance', (req, res) => {
-  res.sendStatus(200);
-});
+module.exports = async (req, res) => {
+  // CORS headers (for browser/app access)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-// GET request handler (optional info/testing)
-app.get('/mark_attendance', (req, res) => {
-  res.json({
-    status: 'info',
-    message: 'This endpoint expects POST requests with attendance data',
-  });
-});
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
 
-// POST request handler
-app.post('/mark_attendance', async (req, res) => {
+  if (req.method === 'GET') {
+    res.status(200).json({
+      status: 'info',
+      message: 'This endpoint expects POST requests with attendance data',
+    });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ status: 'error', message: 'Only POST requests are allowed' });
+    return;
+  }
+
   try {
     const data = req.body;
 
     if (!data || !data.qr_data) {
-      return res.status(400).json({ status: 'error', message: "Missing 'qr_data' in request" });
+      res.status(400).json({ status: 'error', message: "Missing 'qr_data' in request" });
+      return;
     }
 
-    // qr_data is a JSON string, parse it
     let qrInfo;
     try {
-      qrInfo = JSON.parse(data.qr_data);
+      qrInfo = typeof data.qr_data === 'string' ? JSON.parse(data.qr_data) : data.qr_data;
     } catch (err) {
-      return res.status(400).json({ status: 'error', message: "Invalid JSON format in 'qr_data'" });
+      res.status(400).json({ status: 'error', message: "Invalid JSON format in 'qr_data'" });
+      return;
     }
 
-    // Validate required fields
     const requiredFields = ['studentId', 'fullname', 'Date', 'time'];
     for (const field of requiredFields) {
       if (!qrInfo[field]) {
-        return res.status(400).json({ status: 'error', message: `Missing required field: ${field}` });
+        res.status(400).json({ status: 'error', message: `Missing required field: ${field}` });
+        return;
       }
     }
 
     const studentId = parseInt(qrInfo.studentId, 10);
     const studentName = qrInfo.fullname;
-    const date = qrInfo.Date; // Expected format: YYYY-MM-DD
-    const time = qrInfo.time; // Expected format: HH:MM:SS or HH:MM
+    const date = qrInfo.Date;
+    const time = qrInfo.time;
 
-    // Connect to database
     const conn = await mysql.createConnection(dbConfig);
 
     // Create attendance table if not exists
@@ -82,7 +78,7 @@ app.post('/mark_attendance', async (req, res) => {
     `;
     await conn.execute(createTableSQL);
 
-    // Check if attendance already marked for student on the date
+    // Check for existing attendance
     const [existing] = await conn.execute(
       'SELECT id FROM attendance WHERE student_id = ? AND date = ?',
       [studentId, date]
@@ -90,21 +86,22 @@ app.post('/mark_attendance', async (req, res) => {
 
     if (existing.length > 0) {
       await conn.end();
-      return res.status(409).json({
+      res.status(409).json({
         status: 'error',
         message: `Attendance already marked for this student on ${date}`,
       });
+      return;
     }
 
     // Insert attendance record
-    const [result] = await conn.execute(
+    await conn.execute(
       'INSERT INTO attendance (student_id, student_name, date, time) VALUES (?, ?, ?, ?)',
       [studentId, studentName, date, time]
     );
 
     await conn.end();
 
-    return res.json({
+    res.status(200).json({
       status: 'success',
       message: `Attendance marked successfully for student ${studentName}`,
       data: {
@@ -112,19 +109,14 @@ app.post('/mark_attendance', async (req, res) => {
         fullname: studentName,
         Date: date,
         time,
-        marked_at: new Date().toISOString().slice(0, 19).replace('T', ' '), // Format: YYYY-MM-DD HH:mm:ss
+        marked_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
       },
     });
   } catch (error) {
     console.error('Error in /mark_attendance:', error);
-    return res.status(400).json({
+    res.status(400).json({
       status: 'error',
       message: error.message || 'Failed to mark attendance',
     });
   }
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+};
