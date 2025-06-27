@@ -1,33 +1,30 @@
-const express = require('express');
 const mysql = require('mysql2/promise');
-const cors = require('cors');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Enable CORS for all origins and allow GET, OPTIONS methods
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-}));
-
-// MySQL connection config - replace with your actual credentials or use env variables
 const dbConfig = {
-host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: 3306,
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  port: 3306,
 };
 
-// Handle preflight OPTIONS request
-app.options('/get_attendance', (req, res) => {
-  res.sendStatus(200);
-});
+module.exports = async (req, res) => {
+  // CORS headers for browser/app access
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-// GET endpoint to fetch attendance records
-app.get('/get_attendance', async (req, res) => {
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'GET') {
+    res.status(405).json({ status: 'error', message: 'Only GET requests are allowed' });
+    return;
+  }
+
   try {
     const conn = await mysql.createConnection(dbConfig);
 
@@ -39,12 +36,13 @@ app.get('/get_attendance', async (req, res) => {
     await conn.end();
 
     if (rows.length === 0) {
-      return res.json({
+      res.status(200).json({
         status: 'success',
         message: 'No attendance records found',
         data: [],
         count: 0,
       });
+      return;
     }
 
     // Map results and convert student_id to integer
@@ -55,7 +53,7 @@ app.get('/get_attendance', async (req, res) => {
       time: row.time,
     }));
 
-    return res.json({
+    res.status(200).json({
       status: 'success',
       message: 'Attendance records retrieved successfully',
       data: attendanceRecords,
@@ -63,14 +61,9 @@ app.get('/get_attendance', async (req, res) => {
     });
   } catch (error) {
     console.error('Error in /get_attendance:', error);
-    return res.status(500).json({
+    res.status(500).json({
       status: 'error',
       message: error.message || 'Internal server error',
     });
   }
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+};
