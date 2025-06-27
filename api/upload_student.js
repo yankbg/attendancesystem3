@@ -1,68 +1,78 @@
-const express = require('express');
+// /api/upload_student.js (for Vercel API route)
+// or as an Express route handler (adjust exports as needed)
+
 const mysql = require('mysql2/promise');
-const fs = require('fs-extra');
-const path = require('path');
+const { v2: cloudinary } = require('cloudinary');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+// Cloudinary configuration (use environment variables for security)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dq4p0a6x1',
+  api_key: process.env.CLOUDINARY_API_KEY || '823294593735767',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'your_cloudinary_secret',
+});
 
-// Middleware to parse JSON body
-app.use(express.json({ limit: '10mb' })); // Increase limit if images are large
-
-// MySQL connection config - replace with your actual credentials or use environment variables
+// MySQL config (use environment variables in production)
 const dbConfig = {
-host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: 3306,
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASS || '',
+  database: process.env.DB_NAME || 'attendancesystem',
+  port: 3306,
 };
 
-app.post('/upload_student', async (req, res) => {
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ status: 'error', message: 'Only POST requests are allowed' });
+    return;
+  }
+
   try {
     const data = req.body;
 
-    // 2. Validate JSON input
+    // Validate JSON input
     if (!data) {
-      return res.status(400).json({ status: 'error', message: 'Invalid JSON input' });
+      res.status(400).json({ status: 'error', message: 'Invalid JSON input' });
+      return;
     }
 
-    // 3. Validate required fields
     const { id, name, image } = data;
     if (!id || !name || !image) {
-      return res.status(400).json({
+      res.status(400).json({
         status: 'error',
         message: 'Missing required parameters: id, name, or image',
       });
+      return;
     }
 
-    // 4. Clean and decode Base64 image data
+    // Clean and decode Base64 image data
     let imageData = image;
     if (imageData.includes('base64,')) {
       imageData = imageData.split('base64,')[1];
     }
     imageData = imageData.replace(/ /g, '+');
 
-    const decodedImage = Buffer.from(imageData, 'base64');
-    if (!decodedImage) {
-      return res.status(400).json({ status: 'error', message: 'Failed to decode Base64 image' });
+    // Upload to Cloudinary
+    let uploadResult;
+    try {
+      uploadResult = await cloudinary.uploader.upload(
+        `data:image/jpeg;base64,${imageData}`,
+        {
+          public_id: `student_${id}_${Date.now()}`,
+          folder: 'students',
+        }
+      );
+    } catch (err) {
+      console.error('Cloudinary upload error:', err);
+      res.status(500).json({ status: 'error', message: 'Failed to upload image to Cloudinary' });
+      return;
     }
 
-    // 5. Create uploads directory if it doesn't exist
-    const uploadDir = path.join(__dirname, 'uploads');
-    await fs.ensureDir(uploadDir);
+    const imageUrl = uploadResult.secure_url;
 
-    // 6. Generate a unique filename for the image
-    const fileName = `img_${Date.now()}.jpg`;
-    const filePath = path.join(uploadDir, fileName);
-
-    // 7. Save the decoded image to the server
-    await fs.writeFile(filePath, decodedImage);
-
-    // 8. Connect to database
+    // Connect to database
     const conn = await mysql.createConnection(dbConfig);
 
-    // 9. Create students table if not exists
+    // Create students table if not exists
     const createTableSQL = `
       CREATE TABLE IF NOT EXISTS students (
         id VARCHAR(50) PRIMARY KEY,
@@ -73,40 +83,35 @@ app.post('/upload_student', async (req, res) => {
     `;
     await conn.execute(createTableSQL);
 
-    // 10. Check for duplicate student by id or name
+    // Check for duplicate student by id or name
     const [rows] = await conn.execute(
       'SELECT COUNT(*) as count FROM students WHERE id = ? OR name = ?',
       [id, name]
     );
     if (rows[0].count > 0) {
       await conn.end();
-      return res.status(409).json({
+      res.status(409).json({
         status: 'error',
         message: 'Student with this ID or name already registered',
       });
+      return;
     }
 
-    // 11. Insert student data into database
-    const relativeFilePath = `uploads/${fileName}`;
+    // Insert student data into database
     await conn.execute(
       'INSERT INTO students (id, name, image_path) VALUES (?, ?, ?)',
-      [id, name, relativeFilePath]
+      [id, name, imageUrl]
     );
 
     await conn.end();
 
-    return res.json({
+    res.json({
       status: 'success',
       message: 'Student registered successfully',
-      image_path: relativeFilePath,
+      image_path: imageUrl,
     });
   } catch (error) {
     console.error('Error in /upload_student:', error);
-    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+};
