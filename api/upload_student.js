@@ -17,7 +17,7 @@ const dbConfig = {
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASS || '',
   database: process.env.DB_NAME || 'attendancesystem',
-  port: 3306,
+  port: 13662,
 };
 
 module.exports = async (req, res) => {
