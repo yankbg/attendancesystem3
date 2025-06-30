@@ -1,10 +1,49 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/*.js", "use": "@vercel/node" }
+    { "src": "api/check_student.js", "use": "@vercel/node" },
+    { "src": "api/get_Attendance.js", "use": "@vercel/node" },
+    { "src": "api/get_attendanceDate.js", "use": "@vercel/node" },
+    { "src": "api/get_student_info.js", "use": "@vercel/node" },
+    { "src": "api/mark_attendance.js", "use": "@vercel/node" },
+    { "src": "api/upload_student.js", "use": "@vercel/node" },
+    { "src": "public/**/*", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+    {
+      "src": "/api/check_student",
+      "dest": "/api/check_student.js",
+      "methods": ["POST", "OPTIONS"]
+    },
+    {
+      "src": "/api/get_Attendance",
+      "dest": "/api/get_Attendance.js",
+      "methods": ["GET", "OPTIONS"]
+    },
+    {
+      "src": "/api/get_attendanceDate",
+      "dest": "/api/get_attendanceDate.js",
+      "methods": ["POST", "GET", "OPTIONS"]
+    },
+    {
+      "src": "/api/get_student_info",
+      "dest": "/api/get_student_info.js",
+      "methods": ["POST", "OPTIONS"]
+    },
+    {
+      "src": "/api/mark_attendance",
+      "dest": "/api/mark_attendance.js",
+      "methods": ["POST", "OPTIONS"]
+    },
+    {
+      "src": "/api/upload_student",
+      "dest": "/api/upload_student.js",
+      "methods": ["POST", "OPTIONS"]
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/index.html",
+      "methods": ["GET","POST"]
+    }
   ]
 }
