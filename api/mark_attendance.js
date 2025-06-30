@@ -68,7 +68,7 @@ module.exports = async (req, res) => {
     const createTableSQL = `
       CREATE TABLE IF NOT EXISTS attendance (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        student_id INT NOT NULL,
+         student_id VARCHAR(50) NOT NULL,
         student_name VARCHAR(255) NOT NULL,
         date DATE NOT NULL,
         time TIME NOT NULL,
